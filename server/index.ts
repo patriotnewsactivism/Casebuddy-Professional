@@ -1,12 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
-import { registerRoutes } from "./routes";
-import { serveStatic } from "./static";
 import { createServer } from "http";
 import { applySecurityMiddleware, secureErrorHandler } from "./middleware/security";
-import { registerAuthRoutes } from "./routes/auth";
-import { registerHealthRoutes } from "./routes/health";
-import { ensureAuditLogTable } from "./services/auditLog";
+import { hasDatabaseConfig } from "@shared/databaseUrl";
 
 const app = express();
 const httpServer = createServer(app);
@@ -75,6 +71,21 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  const isCiBuild = process.env.CI === "true" || process.env.VERCEL === "1";
+
+  if (!hasDatabaseConfig()) {
+    if (isCiBuild) {
+      log("No database configuration detected in CI build; skipping server startup.");
+      process.exit(0);
+    }
+
+    throw new Error(
+      "DATABASE_URL environment variable is required. Alternatively, provide DB_USER, DB_PASSWORD, DB_NAME, and either CLOUD_SQL_CONNECTION_NAME (for Cloud SQL sockets) or DB_HOST (for TCP).",
+    );
+  }
+
+  const { ensureAuditLogTable } = await import("./services/auditLog");
+
   // Ensure audit log table exists for compliance
   await ensureAuditLogTable();
 
@@ -87,11 +98,14 @@ app.use((req, res, next) => {
   startNewsRefreshScheduler();
 
   // Register health check routes (before auth for load balancer access)
+  const { registerHealthRoutes } = await import("./routes/health");
   registerHealthRoutes(app);
 
   // Register authentication routes (before other routes)
+  const { registerAuthRoutes } = await import("./routes/auth");
   registerAuthRoutes(app);
 
+  const { registerRoutes } = await import("./routes");
   await registerRoutes(httpServer, app);
 
   // Secure error handler (doesn't leak stack traces in production)
@@ -101,6 +115,7 @@ app.use((req, res, next) => {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
+    const { serveStatic } = await import("./static");
     serveStatic(app);
   } else {
     const { setupVite } = await import("./vite");

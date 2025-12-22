@@ -70,3 +70,29 @@ export function resolveDatabaseUrl(env: DatabaseEnvConfig = process.env): string
     "DATABASE_URL environment variable is required. Alternatively, provide DB_USER, DB_PASSWORD, DB_NAME, and either CLOUD_SQL_CONNECTION_NAME (for Cloud SQL sockets) or DB_HOST (for TCP).",
   );
 }
+
+/**
+ * Checks whether the environment contains enough information to configure a database connection.
+ *
+ * This mirrors the validation logic used by resolveDatabaseUrl but returns a boolean instead of
+ * throwing, making it suitable for conditional server startup in CI/build environments where a
+ * database is intentionally unavailable.
+ */
+export function hasDatabaseConfig(env: DatabaseEnvConfig = process.env): boolean {
+  if (env.DATABASE_URL?.trim()) {
+    return true;
+  }
+
+  const dbUser = env.DB_USER || env.POSTGRES_USER;
+  const dbPassword = env.DB_PASSWORD || env.POSTGRES_PASSWORD;
+  const dbName = env.DB_NAME || env.POSTGRES_DB;
+  const dbHost = env.DB_HOST;
+  const cloudSql = env.CLOUD_SQL_CONNECTION_NAME;
+
+  const hasBaseCredentials = Boolean(dbUser && dbPassword && dbName);
+  if (!hasBaseCredentials) {
+    return false;
+  }
+
+  return Boolean(cloudSql || dbHost);
+}
