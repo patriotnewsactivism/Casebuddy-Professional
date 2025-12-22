@@ -1,6 +1,9 @@
 import { WebSocketServer, WebSocket } from "ws";
-import type { Server } from "http";
+import type { Server, IncomingMessage } from "http";
 import { log } from "../index";
+import { parse as parseCookie } from "cookie";
+import { validateSession } from "../middleware/auth";
+import { auditLog, AuditAction, ResourceType } from "./auditLog";
 
 interface UserPresence {
   odId: string;
@@ -9,16 +12,18 @@ interface UserPresence {
   caseId: number;
   joinedAt: Date;
   lastActivity: Date;
+  authenticated: boolean;
 }
 
 interface CollaborationMessage {
-  type: "join" | "leave" | "presence" | "update" | "cursor" | "ping" | "pong" | "chat";
+  type: "join" | "leave" | "presence" | "update" | "cursor" | "ping" | "pong" | "chat" | "auth";
   caseId?: number;
   userId?: string;
   userName?: string;
   userColor?: string;
   content?: string;
   data?: any;
+  token?: string;
 }
 
 const COLORS = [
@@ -30,42 +35,147 @@ class CollaborationService {
   private wss: WebSocketServer | null = null;
   private clients: Map<WebSocket, UserPresence> = new Map();
   private casePresence: Map<number, Set<string>> = new Map();
+  private pendingAuth: Map<WebSocket, NodeJS.Timeout> = new Map();
+
+  // Rate limiting for WebSocket messages
+  private messageRateLimits: Map<string, { count: number; resetAt: number }> = new Map();
+  private readonly MAX_MESSAGES_PER_MINUTE = 120;
 
   initialize(server: Server) {
-    this.wss = new WebSocketServer({ 
-      server, 
-      path: "/ws/collaboration" 
+    this.wss = new WebSocketServer({
+      server,
+      path: "/ws/collaboration",
+      verifyClient: (info, callback) => {
+        // Try to validate session from cookie
+        const cookies = info.req.headers.cookie ? parseCookie(info.req.headers.cookie) : {};
+        const token = cookies.session_token;
+
+        if (token) {
+          const session = validateSession(token);
+          if (session) {
+            // Attach session info to request for later use
+            (info.req as any).authenticatedUser = {
+              userId: session.userId,
+              username: session.username,
+            };
+            callback(true);
+            return;
+          }
+        }
+
+        // Allow connection but require auth message within 5 seconds
+        callback(true);
+      },
     });
 
-    this.wss.on("connection", (ws) => {
-      log("WebSocket client connected", "collab");
+    this.wss.on("connection", (ws, req: IncomingMessage) => {
+      const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim()
+        || req.socket.remoteAddress
+        || "unknown";
+
+      log(`WebSocket client connected from ${ip}`, "collab");
+
+      // Check if pre-authenticated via cookie
+      const authenticatedUser = (req as any).authenticatedUser;
+      if (authenticatedUser) {
+        log(`WebSocket client pre-authenticated as ${authenticatedUser.username}`, "collab");
+      } else {
+        // Require authentication within 5 seconds
+        const timeout = setTimeout(() => {
+          const presence = this.clients.get(ws);
+          if (!presence?.authenticated) {
+            log(`WebSocket client failed to authenticate within timeout`, "collab");
+            ws.close(4001, "Authentication timeout");
+          }
+        }, 5000);
+        this.pendingAuth.set(ws, timeout);
+      }
 
       ws.on("message", (data) => {
         try {
-          const message: CollaborationMessage = JSON.parse(data.toString());
-          this.handleMessage(ws, message);
+          // Rate limiting
+          const presence = this.clients.get(ws);
+          if (presence) {
+            if (!this.checkRateLimit(presence.odId)) {
+              ws.send(JSON.stringify({ type: "error", message: "Rate limit exceeded" }));
+              return;
+            }
+          }
+
+          const rawMessage = data.toString();
+
+          // Validate message size (max 64KB)
+          if (rawMessage.length > 65536) {
+            ws.send(JSON.stringify({ type: "error", message: "Message too large" }));
+            return;
+          }
+
+          const message: CollaborationMessage = JSON.parse(rawMessage);
+
+          // Sanitize message content
+          if (message.content) {
+            message.content = this.sanitizeContent(message.content);
+          }
+
+          this.handleMessage(ws, message, authenticatedUser, ip);
         } catch (err) {
           log(`Invalid WebSocket message: ${err}`, "collab");
         }
       });
 
       ws.on("close", () => {
-        this.handleDisconnect(ws);
+        // Clean up pending auth timeout
+        const timeout = this.pendingAuth.get(ws);
+        if (timeout) {
+          clearTimeout(timeout);
+          this.pendingAuth.delete(ws);
+        }
+        this.handleDisconnect(ws, ip);
       });
 
       ws.on("error", (err) => {
         log(`WebSocket error: ${err}`, "collab");
-        this.handleDisconnect(ws);
+        this.handleDisconnect(ws, ip);
       });
     });
 
-    log("Collaboration WebSocket server initialized", "collab");
+    log("Collaboration WebSocket server initialized with authentication", "collab");
   }
 
-  private handleMessage(ws: WebSocket, message: CollaborationMessage) {
+  private checkRateLimit(userId: string): boolean {
+    const now = Date.now();
+    const limit = this.messageRateLimits.get(userId);
+
+    if (!limit || limit.resetAt < now) {
+      this.messageRateLimits.set(userId, { count: 1, resetAt: now + 60000 });
+      return true;
+    }
+
+    if (limit.count >= this.MAX_MESSAGES_PER_MINUTE) {
+      return false;
+    }
+
+    limit.count++;
+    return true;
+  }
+
+  private sanitizeContent(content: string): string {
+    // Remove null bytes and limit length
+    return content.replace(/\0/g, "").slice(0, 10000);
+  }
+
+  private handleMessage(
+    ws: WebSocket,
+    message: CollaborationMessage,
+    authenticatedUser?: { userId: string; username: string },
+    ip?: string
+  ) {
     switch (message.type) {
+      case "auth":
+        this.handleAuth(ws, message, ip);
+        break;
       case "join":
-        this.handleJoin(ws, message);
+        this.handleJoin(ws, message, authenticatedUser, ip);
         break;
       case "leave":
         this.handleLeave(ws);
@@ -86,17 +196,73 @@ class CollaborationService {
     }
   }
 
-  private handleJoin(ws: WebSocket, message: CollaborationMessage) {
-    if (!message.caseId || !message.userId) return;
+  private handleAuth(ws: WebSocket, message: CollaborationMessage, ip?: string) {
+    if (!message.token) {
+      ws.send(JSON.stringify({ type: "error", message: "Token required" }));
+      return;
+    }
+
+    const session = validateSession(message.token);
+    if (!session) {
+      ws.send(JSON.stringify({ type: "error", message: "Invalid token" }));
+      ws.close(4003, "Authentication failed");
+      return;
+    }
+
+    // Clear pending auth timeout
+    const timeout = this.pendingAuth.get(ws);
+    if (timeout) {
+      clearTimeout(timeout);
+      this.pendingAuth.delete(ws);
+    }
+
+    // Mark as authenticated
+    const presence = this.clients.get(ws);
+    if (presence) {
+      presence.authenticated = true;
+      presence.odId = session.userId;
+      presence.odName = session.username;
+    }
+
+    ws.send(JSON.stringify({
+      type: "auth_success",
+      userId: session.userId,
+      username: session.username,
+    }));
+
+    log(`WebSocket client authenticated as ${session.username}`, "collab");
+  }
+
+  private handleJoin(
+    ws: WebSocket,
+    message: CollaborationMessage,
+    authenticatedUser?: { userId: string; username: string },
+    ip?: string
+  ) {
+    if (!message.caseId) {
+      ws.send(JSON.stringify({ type: "error", message: "caseId required" }));
+      return;
+    }
+
+    // Use authenticated user info if available, otherwise require auth
+    const userId = authenticatedUser?.userId || message.userId;
+    const userName = authenticatedUser?.username || message.userName;
+
+    if (!userId) {
+      ws.send(JSON.stringify({ type: "error", message: "Authentication required" }));
+      ws.close(4001, "Authentication required");
+      return;
+    }
 
     const userColor = COLORS[Math.floor(Math.random() * COLORS.length)];
     const presence: UserPresence = {
-      odId: message.userId,
-      odName: message.userName || `User ${message.userId.slice(0, 4)}`,
+      odId: userId,
+      odName: userName || `User ${userId.slice(0, 4)}`,
       odColor: message.userColor || userColor,
       caseId: message.caseId,
       joinedAt: new Date(),
       lastActivity: new Date(),
+      authenticated: !!authenticatedUser,
     };
 
     this.clients.set(ws, presence);
@@ -104,22 +270,42 @@ class CollaborationService {
     if (!this.casePresence.has(message.caseId)) {
       this.casePresence.set(message.caseId, new Set());
     }
-    this.casePresence.get(message.caseId)!.add(message.userId);
+    this.casePresence.get(message.caseId)!.add(userId);
 
     log(`User ${presence.odName} joined case ${message.caseId}`, "collab");
+
+    // Audit log
+    auditLog({
+      action: AuditAction.COLLABORATION_JOINED,
+      userId,
+      resourceType: ResourceType.CASE,
+      resourceId: message.caseId,
+      ip,
+      details: { caseId: message.caseId },
+    });
 
     this.broadcastPresence(message.caseId);
   }
 
   private handleLeave(ws: WebSocket) {
-    this.handleDisconnect(ws);
+    this.handleDisconnect(ws, undefined);
   }
 
-  private handleDisconnect(ws: WebSocket) {
+  private handleDisconnect(ws: WebSocket, ip?: string) {
     const presence = this.clients.get(ws);
     if (presence) {
       log(`User ${presence.odName} left case ${presence.caseId}`, "collab");
-      
+
+      // Audit log
+      auditLog({
+        action: AuditAction.COLLABORATION_LEFT,
+        userId: presence.odId,
+        resourceType: ResourceType.CASE,
+        resourceId: presence.caseId,
+        ip,
+        details: { caseId: presence.caseId },
+      });
+
       const caseUsers = this.casePresence.get(presence.caseId);
       if (caseUsers) {
         caseUsers.delete(presence.odId);

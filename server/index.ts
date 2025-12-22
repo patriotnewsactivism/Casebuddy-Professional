@@ -1,7 +1,11 @@
 import express, { type Request, Response, NextFunction } from "express";
+import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { applySecurityMiddleware, secureErrorHandler } from "./middleware/security";
+import { registerAuthRoutes } from "./routes/auth";
+import { ensureAuditLogTable } from "./services/auditLog";
 
 const app = express();
 const httpServer = createServer(app);
@@ -12,15 +16,25 @@ declare module "http" {
   }
 }
 
+// Trust proxy for proper IP detection behind reverse proxy
+app.set("trust proxy", 1);
+
+// Apply security middleware (helmet, rate limiting, etc.)
+applySecurityMiddleware(app);
+
+// Cookie parser for session management
+app.use(cookieParser());
+
 app.use(
   express.json({
+    limit: "10mb", // Limit JSON body size
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: "10mb" }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -60,6 +74,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Ensure audit log table exists for compliance
+  await ensureAuditLogTable();
+
   // Seed database with sample data on first run
   const { seedDatabase } = await import("./seed");
   await seedDatabase();
@@ -68,15 +85,13 @@ app.use((req, res, next) => {
   const { startNewsRefreshScheduler } = await import("./services/newsAggregator");
   startNewsRefreshScheduler();
 
+  // Register authentication routes (before other routes)
+  registerAuthRoutes(app);
+
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
-  });
+  // Secure error handler (doesn't leak stack traces in production)
+  app.use(secureErrorHandler);
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route

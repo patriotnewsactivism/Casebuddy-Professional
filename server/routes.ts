@@ -2,7 +2,6 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { caseIntakeSchema, insertDiscoveryFileSchema, insertDepositionPrepSchema, insertSuggestedFilingSchema, insertCloudFolderSchema } from "@shared/schema";
-import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
 import { processPDF, processMediaFile, processImage, type CaseContext } from "./services/documentProcessor";
@@ -12,12 +11,17 @@ import { listFolders, listFilesInFolder, getFileMetadata, downloadFile, type Dri
 import { collaborationService } from "./services/collaboration";
 import { getOrCreateRoom, addParticipant, removeParticipant, getRoomParticipants } from "./services/videoRooms";
 import type { Request, Response } from "express";
-
-// File upload configuration
-const upload = multer({
-  dest: "uploads/",
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
-});
+import { requireAuth, optionalAuth } from "./middleware/auth";
+import { secureUpload, validateUploadedFile, handleUploadError } from "./middleware/fileUpload";
+import { uploadRateLimiter, aiRateLimiter } from "./middleware/security";
+import {
+  auditLog,
+  AuditAction,
+  ResourceType,
+  extractRequestInfo,
+  logCaseAccess,
+  logFileAccess,
+} from "./services/auditLog";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -32,7 +36,7 @@ export async function registerRoutes(
   // ==================
   // COLLABORATION
   // ==================
-  app.get("/api/cases/:id/presence", async (req: Request, res: Response) => {
+  app.get("/api/cases/:id/presence", requireAuth, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.id);
       const users = collaborationService.getCasePresence(caseId);
@@ -46,14 +50,10 @@ export async function registerRoutes(
   // ==================
   // VIDEO CONFERENCING
   // ==================
-  app.post("/api/cases/:caseId/video-room", async (req: Request, res: Response) => {
+  app.post("/api/cases/:caseId/video-room", requireAuth, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
-      const { userId, userName } = req.body;
-
-      if (!userId || !userName) {
-        return res.status(400).json({ error: "userId and userName are required" });
-      }
+      const { ip, userAgent } = extractRequestInfo(req);
 
       // Check if DAILY_API_KEY is configured
       if (!process.env.DAILY_API_KEY) {
@@ -61,9 +61,19 @@ export async function registerRoutes(
       }
 
       const room = await getOrCreateRoom(caseId);
-      addParticipant(caseId, userId, userName);
+      addParticipant(caseId, req.user!.id, req.user!.username);
 
-      res.json({ 
+      await auditLog({
+        action: AuditAction.VIDEO_CALL_STARTED,
+        userId: req.user!.id,
+        resourceType: ResourceType.VIDEO_CALL,
+        resourceId: caseId,
+        ip,
+        userAgent,
+        details: { roomName: room.roomName },
+      });
+
+      res.json({
         url: room.roomUrl,
         roomName: room.roomName,
         participants: getRoomParticipants(caseId),
@@ -74,7 +84,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/cases/:caseId/video-room", async (req: Request, res: Response) => {
+  app.get("/api/cases/:caseId/video-room", requireAuth, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
       const participants = getRoomParticipants(caseId);
@@ -85,16 +95,22 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/cases/:caseId/video-room", async (req: Request, res: Response) => {
+  app.delete("/api/cases/:caseId/video-room", requireAuth, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
-      const { userId } = req.body;
+      const { ip, userAgent } = extractRequestInfo(req);
 
-      if (!userId) {
-        return res.status(400).json({ error: "userId is required" });
-      }
+      await removeParticipant(caseId, req.user!.id);
 
-      await removeParticipant(caseId, userId);
+      await auditLog({
+        action: AuditAction.VIDEO_CALL_ENDED,
+        userId: req.user!.id,
+        resourceType: ResourceType.VIDEO_CALL,
+        resourceId: caseId,
+        ip,
+        userAgent,
+      });
+
       res.json({ success: true });
     } catch (error) {
       console.error("Error leaving video room:", error);
@@ -103,10 +119,11 @@ export async function registerRoutes(
   });
 
   // Save call recording and transcript
-  app.post("/api/cases/:caseId/call-recording", async (req: Request, res: Response) => {
+  app.post("/api/cases/:caseId/call-recording", requireAuth, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
       const { roomName, transcript } = req.body;
+      const { ip, userAgent } = extractRequestInfo(req);
 
       if (!roomName) {
         return res.status(400).json({ error: "roomName is required" });
@@ -129,6 +146,16 @@ export async function registerRoutes(
         endedAt: new Date(),
       });
 
+      await auditLog({
+        action: AuditAction.RECORDING_SAVED,
+        userId: req.user!.id,
+        resourceType: ResourceType.VIDEO_CALL,
+        resourceId: recording.id,
+        ip,
+        userAgent,
+        details: { caseId, roomName },
+      });
+
       res.status(201).json(recording);
     } catch (error) {
       console.error("Error saving call recording:", error);
@@ -137,7 +164,7 @@ export async function registerRoutes(
   });
 
   // Get call recordings for a case
-  app.get("/api/cases/:caseId/call-recordings", async (req: Request, res: Response) => {
+  app.get("/api/cases/:caseId/call-recordings", requireAuth, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
       const recordings = await storage.getCallRecordingsByCase(caseId);
@@ -159,7 +186,7 @@ export async function registerRoutes(
   
   const validSimulationModes = ["cross-examination", "direct-examination", "opening", "closing"];
   
-  app.post("/api/trial-simulation/start", async (req: Request, res: Response) => {
+  app.post("/api/trial-simulation/start", requireAuth, aiRateLimiter, async (req: Request, res: Response) => {
     try {
       const { caseId, mode } = req.body;
 
@@ -254,7 +281,7 @@ Be realistic, professional, and help the attorney practice effectively. Base you
     }
   });
 
-  app.post("/api/trial-simulation/respond", async (req: Request, res: Response) => {
+  app.post("/api/trial-simulation/respond", requireAuth, aiRateLimiter, async (req: Request, res: Response) => {
     try {
       const { caseId, mode, userStatement, conversationHistory } = req.body;
 
@@ -373,7 +400,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
   });
 
   // Trial Prep Sessions CRUD
-  app.get("/api/cases/:caseId/trial-prep-sessions", async (req: Request, res: Response) => {
+  app.get("/api/cases/:caseId/trial-prep-sessions", requireAuth, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
       const sessions = await storage.getTrialPrepSessionsByCase(caseId);
@@ -384,7 +411,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.get("/api/trial-prep-sessions/:id", async (req: Request, res: Response) => {
+  app.get("/api/trial-prep-sessions/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const session = await storage.getTrialPrepSession(id);
@@ -398,7 +425,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.post("/api/cases/:caseId/trial-prep-sessions", async (req: Request, res: Response) => {
+  app.post("/api/cases/:caseId/trial-prep-sessions", requireAuth, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
       const { sessionMode, transcript, allTips, allWarnings, allSuggestedResponses, notes, duration } = req.body;
@@ -421,7 +448,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.patch("/api/trial-prep-sessions/:id", async (req: Request, res: Response) => {
+  app.patch("/api/trial-prep-sessions/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const session = await storage.updateTrialPrepSession(id, req.body);
@@ -435,7 +462,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.delete("/api/trial-prep-sessions/:id", async (req: Request, res: Response) => {
+  app.delete("/api/trial-prep-sessions/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       await storage.deleteTrialPrepSession(id);
@@ -449,7 +476,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
   // ==================
   // CASES
   // ==================
-  app.get("/api/cases", async (req: Request, res: Response) => {
+  app.get("/api/cases", requireAuth, async (req: Request, res: Response) => {
     try {
       const cases = await storage.getAllCases();
       
@@ -472,14 +499,18 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.get("/api/cases/:id", async (req: Request, res: Response) => {
+  app.get("/api/cases/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
+      const { ip, userAgent } = extractRequestInfo(req);
       const caseData = await storage.getCase(id);
 
       if (!caseData) {
         return res.status(404).json({ error: "Case not found" });
       }
+
+      // Log case access for audit trail
+      await logCaseAccess(AuditAction.CASE_VIEWED, id, req.user!.id, ip, userAgent);
 
       const files = await storage.getDiscoveryFilesByCase(id);
       res.json({
@@ -492,14 +523,22 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.post("/api/cases", async (req: Request, res: Response) => {
+  app.post("/api/cases", requireAuth, async (req: Request, res: Response) => {
     try {
       const validatedData = caseIntakeSchema.parse(req.body);
+      const { ip, userAgent } = extractRequestInfo(req);
+
       // Add default status for new cases
       const newCase = await storage.createCase({
         ...validatedData,
         status: "active",
       });
+
+      await logCaseAccess(AuditAction.CASE_CREATED, newCase.id, req.user!.id, ip, userAgent, {
+        title: newCase.title,
+        caseNumber: newCase.caseNumber,
+      });
+
       res.status(201).json(newCase);
     } catch (error) {
       console.error("Error creating case:", error);
@@ -507,7 +546,28 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.patch("/api/cases/:id", async (req: Request, res: Response) => {
+  app.patch("/api/cases/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { ip, userAgent } = extractRequestInfo(req);
+      const updated = await storage.updateCase(id, req.body);
+
+      if (!updated) {
+        return res.status(404).json({ error: "Case not found" });
+      }
+
+      await logCaseAccess(AuditAction.CASE_UPDATED, id, req.user!.id, ip, userAgent, {
+        updatedFields: Object.keys(req.body),
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating case:", error);
+      res.status(400).json({ error: "Failed to update case" });
+    }
+  });
+
+  app.put("/api/cases/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
       const updated = await storage.updateCase(id, req.body);
@@ -523,25 +583,10 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.put("/api/cases/:id", async (req: Request, res: Response) => {
+  app.delete("/api/cases/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
-      const updated = await storage.updateCase(id, req.body);
-
-      if (!updated) {
-        return res.status(404).json({ error: "Case not found" });
-      }
-
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating case:", error);
-      res.status(400).json({ error: "Failed to update case" });
-    }
-  });
-
-  app.delete("/api/cases/:id", async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id);
+      const { ip, userAgent } = extractRequestInfo(req);
       const existing = await storage.getCase(id);
 
       if (!existing) {
@@ -549,6 +594,12 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
       }
 
       await storage.deleteCase(id);
+
+      await logCaseAccess(AuditAction.CASE_DELETED, id, req.user!.id, ip, userAgent, {
+        title: existing.title,
+        caseNumber: existing.caseNumber,
+      });
+
       res.json({ success: true, message: "Case deleted successfully" });
     } catch (error) {
       console.error("Error deleting case:", error);
@@ -556,9 +607,10 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.get("/api/cases/:id/export", async (req: Request, res: Response) => {
+  app.get("/api/cases/:id/export", requireAuth, async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
+      const { ip, userAgent } = extractRequestInfo(req);
       const caseData = await storage.getCase(id);
 
       if (!caseData) {
@@ -579,6 +631,8 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
         exportedAt: new Date().toISOString(),
       };
 
+      await logCaseAccess(AuditAction.CASE_EXPORTED, id, req.user!.id, ip, userAgent);
+
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Content-Disposition", `attachment; filename="${caseData.caseNumber}-export.json"`);
       res.json(exportData);
@@ -591,7 +645,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
   // ==================
   // DISCOVERY FILES
   // ==================
-  app.get("/api/cases/:caseId/discovery", async (req: Request, res: Response) => {
+  app.get("/api/cases/:caseId/discovery", requireAuth, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
       const files = await storage.getDiscoveryFilesByCase(caseId);
@@ -602,7 +656,14 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.post("/api/cases/:caseId/discovery/upload", upload.single("file"), async (req: Request, res: Response) => {
+  app.post(
+    "/api/cases/:caseId/discovery/upload",
+    requireAuth,
+    uploadRateLimiter,
+    secureUpload.single("file"),
+    validateUploadedFile,
+    handleUploadError,
+    async (req: Request, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: "No file uploaded" });
@@ -672,6 +733,15 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
         sourceType: "upload",
       });
 
+      // Log file upload for audit
+      const { ip, userAgent } = extractRequestInfo(req);
+      await logFileAccess(AuditAction.FILE_UPLOADED, discoveryFile.id, req.user!.id, ip, userAgent, {
+        caseId,
+        fileName: file.originalname,
+        fileType: mimeType,
+        fileSize: file.size,
+      });
+
       // Notify collaborators about new file
       collaborationService.notifyCaseUpdate(caseId, "discovery", { fileId: discoveryFile.id });
 
@@ -685,7 +755,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
   // ==================
   // TIMELINE
   // ==================
-  app.get("/api/cases/:caseId/timeline", async (req: Request, res: Response) => {
+  app.get("/api/cases/:caseId/timeline", requireAuth, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
       const events = await storage.getTimelineEventsByCase(caseId);
@@ -696,7 +766,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.post("/api/cases/:caseId/timeline/generate", async (req: Request, res: Response) => {
+  app.post("/api/cases/:caseId/timeline/generate", requireAuth, aiRateLimiter, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
 
@@ -731,7 +801,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
   // ==================
   // DEPOSITION PREP
   // ==================
-  app.get("/api/cases/:caseId/deposition", async (req: Request, res: Response) => {
+  app.get("/api/cases/:caseId/deposition", requireAuth, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
       const preps = await storage.getDepositionPrepByCase(caseId);
@@ -742,7 +812,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.post("/api/cases/:caseId/deposition/generate", async (req: Request, res: Response) => {
+  app.post("/api/cases/:caseId/deposition/generate", requireAuth, aiRateLimiter, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
       const { witnessName, depositionType } = req.body;
@@ -777,7 +847,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
   // ==================
   // SUGGESTED FILINGS
   // ==================
-  app.get("/api/cases/:caseId/filings", async (req: Request, res: Response) => {
+  app.get("/api/cases/:caseId/filings", requireAuth, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
       const filings = await storage.getSuggestedFilingsByCase(caseId);
@@ -788,7 +858,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.post("/api/cases/:caseId/filings/generate", async (req: Request, res: Response) => {
+  app.post("/api/cases/:caseId/filings/generate", requireAuth, aiRateLimiter, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
 
@@ -823,7 +893,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
   // ==================
 
   // List Google Drive folders
-  app.get("/api/drive/folders", async (req: Request, res: Response) => {
+  app.get("/api/drive/folders", requireAuth, async (req: Request, res: Response) => {
     try {
       const parentId = req.query.parentId as string | undefined;
       const folders = await listFolders(parentId);
@@ -838,7 +908,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
   });
 
   // Get cloud folders linked to a case
-  app.get("/api/cases/:caseId/cloud-folders", async (req: Request, res: Response) => {
+  app.get("/api/cases/:caseId/cloud-folders", requireAuth, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
       const folders = await storage.getCloudFoldersByCase(caseId);
@@ -850,7 +920,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
   });
 
   // Link a Google Drive folder to a case
-  app.post("/api/cases/:caseId/cloud-folders", async (req: Request, res: Response) => {
+  app.post("/api/cases/:caseId/cloud-folders", requireAuth, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
       const { folderId, folderName, batesPrefix } = req.body;
@@ -876,7 +946,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
   });
 
   // Sync a cloud folder - imports all files with Bates numbers
-  app.post("/api/cloud-folders/:folderId/sync", async (req: Request, res: Response) => {
+  app.post("/api/cloud-folders/:folderId/sync", requireAuth, async (req: Request, res: Response) => {
     try {
       const folderId = parseInt(req.params.folderId);
       const cloudFolder = await storage.getCloudFolder(folderId);
@@ -960,7 +1030,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
   });
 
   // Delete a cloud folder link
-  app.delete("/api/cloud-folders/:folderId", async (req: Request, res: Response) => {
+  app.delete("/api/cloud-folders/:folderId", requireAuth, async (req: Request, res: Response) => {
     try {
       const folderId = parseInt(req.params.folderId);
       await storage.deleteCloudFolder(folderId);
@@ -1013,7 +1083,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
   // ==================
   const { generateLegalBrief, getBriefTypes } = await import("./services/briefGenerator");
 
-  app.get("/api/cases/:caseId/briefs", async (req: Request, res: Response) => {
+  app.get("/api/cases/:caseId/briefs", requireAuth, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
       const briefs = await storage.getLegalBriefsByCase(caseId);
@@ -1024,7 +1094,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.get("/api/briefs/types", async (req: Request, res: Response) => {
+  app.get("/api/briefs/types", requireAuth, async (req: Request, res: Response) => {
     try {
       const types = getBriefTypes();
       res.json(types);
@@ -1034,7 +1104,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.get("/api/briefs/:briefId", async (req: Request, res: Response) => {
+  app.get("/api/briefs/:briefId", requireAuth, async (req: Request, res: Response) => {
     try {
       const briefId = parseInt(req.params.briefId);
       const brief = await storage.getLegalBrief(briefId);
@@ -1048,7 +1118,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.post("/api/cases/:caseId/briefs/generate", async (req: Request, res: Response) => {
+  app.post("/api/cases/:caseId/briefs/generate", requireAuth, aiRateLimiter, async (req: Request, res: Response) => {
     try {
       const caseId = parseInt(req.params.caseId);
       const { briefType, title, additionalInstructions } = req.body;
@@ -1074,7 +1144,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.put("/api/briefs/:briefId", async (req: Request, res: Response) => {
+  app.put("/api/briefs/:briefId", requireAuth, async (req: Request, res: Response) => {
     try {
       const briefId = parseInt(req.params.briefId);
       const { content, title, status } = req.body;
@@ -1096,7 +1166,7 @@ Be realistic and help the attorney improve their trial skills. Keep responses co
     }
   });
 
-  app.delete("/api/briefs/:briefId", async (req: Request, res: Response) => {
+  app.delete("/api/briefs/:briefId", requireAuth, async (req: Request, res: Response) => {
     try {
       const briefId = parseInt(req.params.briefId);
       await storage.deleteLegalBrief(briefId);
