@@ -103,6 +103,7 @@
     "zod-validation-error": "^3.5.4"
   },
   "devDependencies": {
+    "@rolldown/pluginutils": "^1.0.0-beta.56",
     "@tailwindcss/vite": "^4.1.14",
     "@types/bcrypt": "^6.0.0",
     "@types/connect-pg-simple": "^7.0.3",
