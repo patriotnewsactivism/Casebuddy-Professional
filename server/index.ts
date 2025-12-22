@@ -5,6 +5,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { applySecurityMiddleware, secureErrorHandler } from "./middleware/security";
 import { registerAuthRoutes } from "./routes/auth";
+import { registerHealthRoutes } from "./routes/health";
 import { ensureAuditLogTable } from "./services/auditLog";
 
 const app = express();
@@ -84,6 +85,9 @@ app.use((req, res, next) => {
   // Start news aggregator scheduler
   const { startNewsRefreshScheduler } = await import("./services/newsAggregator");
   startNewsRefreshScheduler();
+
+  // Register health check routes (before auth for load balancer access)
+  registerHealthRoutes(app);
 
   // Register authentication routes (before other routes)
   registerAuthRoutes(app);
