@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import { db } from "../db";
+import { db, isDatabaseConfigured } from "../db";
 import { sql } from "drizzle-orm";
 
 /**
@@ -58,19 +58,27 @@ export function registerHealthRoutes(app: Express) {
     };
 
     // Check database connectivity
-    try {
-      const dbStart = Date.now();
-      await db.execute(sql`SELECT 1`);
-      healthStatus.checks.database = {
-        status: "up",
-        latency: Date.now() - dbStart,
-      };
-    } catch (error) {
+    if (!isDatabaseConfigured) {
       healthStatus.checks.database = {
         status: "down",
-        error: error instanceof Error ? error.message : "Unknown database error",
+        error: "Database connection string is not configured. Set the DATABASE_URL environment variable.",
       };
       healthStatus.status = "unhealthy";
+    } else {
+      try {
+        const dbStart = Date.now();
+        await db.execute(sql`SELECT 1`);
+        healthStatus.checks.database = {
+          status: "up",
+          latency: Date.now() - dbStart,
+        };
+      } catch (error) {
+        healthStatus.checks.database = {
+          status: "down",
+          error: error instanceof Error ? error.message : "Unknown database error",
+        };
+        healthStatus.status = "unhealthy";
+      }
     }
 
     // Check memory pressure
@@ -91,12 +99,20 @@ export function registerHealthRoutes(app: Express) {
 
   // Startup probe for slow-starting containers
   app.get("/api/health/startup", async (_req, res) => {
+    if (!isDatabaseConfigured) {
+      res.status(503).json({ ready: false, error: "DATABASE_URL is not configured" });
+      return;
+    }
+
     try {
       // Verify critical services are ready
       await db.execute(sql`SELECT 1`);
       res.status(200).json({ ready: true });
-    } catch {
-      res.status(503).json({ ready: false });
+    } catch (error) {
+      res.status(503).json({
+        ready: false,
+        error: error instanceof Error ? error.message : "Database connectivity error",
+      });
     }
   });
 }
