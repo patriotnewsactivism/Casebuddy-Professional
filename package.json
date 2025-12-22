@@ -1,5 +1,5 @@
 {
-  "name": "rest-express",
+  "name": "casebuddy-professional",
   "version": "1.0.0",
   "type": "module",
   "license": "MIT",
@@ -9,7 +9,15 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "deploy:gcloud": "npm run build && gcloud app deploy --quiet",
+    "deploy:cloudrun": "gcloud builds submit --tag gcr.io/$GOOGLE_CLOUD_PROJECT/casebuddy-professional && gcloud run deploy casebuddy-professional --image gcr.io/$GOOGLE_CLOUD_PROJECT/casebuddy-professional --platform managed --region us-central1 --allow-unauthenticated",
+    "deploy:firebase": "npm run build && firebase deploy",
+    "cloudsql:proxy": "cloud_sql_proxy -instances=$CLOUD_SQL_CONNECTION_NAME=tcp:5432",
+    "docker:build": "docker build -t casebuddy-professional .",
+    "docker:run": "docker run -p 8080:8080 --env-file .env casebuddy-professional"
   },
   "dependencies": {
     "@daily-co/daily-js": "^0.85.0",
