@@ -139,11 +139,11 @@ export async function listFilesInFolder(folderId: string): Promise<DriveFile[]> 
           id: file.id!,
           name: file.name!,
           mimeType: file.mimeType!,
-          size: file.size,
-          webViewLink: file.webViewLink,
-          webContentLink: file.webContentLink,
-          createdTime: file.createdTime,
-          modifiedTime: file.modifiedTime,
+          size: file.size ?? undefined,
+          webViewLink: file.webViewLink ?? undefined,
+          webContentLink: file.webContentLink ?? undefined,
+          createdTime: file.createdTime ?? undefined,
+          modifiedTime: file.modifiedTime ?? undefined,
         });
       }
     }
@@ -183,10 +183,10 @@ export async function getFileMetadata(fileId: string): Promise<DriveFile> {
     id: response.data.id!,
     name: response.data.name!,
     mimeType: response.data.mimeType!,
-    size: response.data.size,
-    webViewLink: response.data.webViewLink,
-    webContentLink: response.data.webContentLink,
-    createdTime: response.data.createdTime,
-    modifiedTime: response.data.modifiedTime,
+    size: response.data.size ?? undefined,
+    webViewLink: response.data.webViewLink ?? undefined,
+    webContentLink: response.data.webContentLink ?? undefined,
+    createdTime: response.data.createdTime ?? undefined,
+    modifiedTime: response.data.modifiedTime ?? undefined,
   };
 }
