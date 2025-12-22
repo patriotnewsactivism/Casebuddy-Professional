@@ -302,10 +302,109 @@ Additional security-related environment variables:
 
 ## Production Deployment
 
-The application is configured for Replit deployment:
-- Server listens on `0.0.0.0:PORT` (default 5000)
+The application supports multiple Google Cloud deployment options:
+
+### Development Commands
+```bash
+npm run dev          # Start development server
+npm run build        # Build for production
+npm run check        # TypeScript type checking
+npm run db:push      # Push schema to database
+npm run db:migrate   # Run migrations
+npm run db:studio    # Open Drizzle Studio
+```
+
+### Google App Engine Deployment
+```bash
+# Build and deploy to App Engine
+npm run deploy:gcloud
+
+# Manual deployment
+npm run build
+gcloud app deploy app.yaml --quiet
+```
+
+Configuration in `app.yaml`:
+- Node.js 20 runtime
+- Automatic scaling (0-10 instances)
+- Health checks configured
+- Static file caching for assets
+
+### Google Cloud Run Deployment
+```bash
+# Build and deploy to Cloud Run
+npm run deploy:cloudrun
+
+# Or using Docker
+npm run docker:build
+npm run docker:run
+```
+
+Configuration in `Dockerfile`:
+- Multi-stage build for smaller images
+- Non-root user for security
+- Health check endpoint
+- Graceful shutdown handling
+
+### Firebase Hosting (with Cloud Run backend)
+```bash
+npm run deploy:firebase
+```
+
+Configuration in `firebase.json`:
+- Static assets served from Firebase CDN
+- API requests proxied to Cloud Run service
+- Security headers configured
+
+### Database Configuration
+
+**Cloud SQL (PostgreSQL)**
+```bash
+# Start Cloud SQL Auth Proxy
+npm run cloudsql:proxy
+
+# Connection string format
+DATABASE_URL=postgresql://user:pass@localhost:5432/casebuddy?host=/cloudsql/PROJECT:REGION:INSTANCE
+```
+
+Environment variables for database:
+- `DATABASE_URL` - Connection string (required)
+- `CLOUD_SQL_CONNECTION_NAME` - For Unix socket connection
+- `DB_SSL_REJECT_UNAUTHORIZED` - Set to "false" for self-signed certs
+
+### Environment Variables
+
+See `.env.example` for all configuration options:
+- `GOOGLE_CLOUD_PROJECT` - GCP project ID
+- `GOOGLE_GENAI_API_KEY` - Gemini AI API key
+- `SESSION_SECRET` - Session signing secret (32+ chars)
+- `DATABASE_URL` - PostgreSQL connection string
+- `DAILY_API_KEY` - Video conferencing (optional)
+
+### CI/CD Pipeline
+
+Cloud Build configuration in `cloudbuild.yaml`:
+1. Install dependencies
+2. Run type checking
+3. Build application
+4. Deploy to App Engine
+
+Trigger on push to main branch or manual trigger.
+
+### Health Check Endpoints
+
+- `GET /api/health` - Basic liveness check
+- `GET /api/health/ready` - Detailed readiness with DB check
+- `GET /api/health/live` - Kubernetes liveness probe
+- `GET /api/health/startup` - Startup probe for slow containers
+
+### Production Configuration
+
+- Server listens on `0.0.0.0:PORT` (default 8080 in cloud, 5000 local)
 - Static files served from `dist/public` in production
 - Vite dev server used only in development
 - Database seeding runs on startup (see `server/seed.ts`)
 - News aggregator scheduler starts automatically
 - Audit log table auto-created on startup
+- Connection pooling optimized for cloud environments
+- Graceful shutdown on SIGTERM/SIGINT

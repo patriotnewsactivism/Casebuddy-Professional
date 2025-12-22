@@ -1,0 +1,48 @@
+type User @table {
+  displayName: String!
+  createdAt: Timestamp!
+  email: String
+  photoUrl: String
+}
+
+type Case @table {
+  user: User
+  caseName: String!
+  caseNumber: String!
+  court: String!
+  createdAt: Timestamp!
+  judge: String
+  plaintiff: String
+  defendant: String
+  description: String
+}
+
+type Deadline @table {
+  case: Case
+  deadlineDate: Date!
+  description: String!
+  createdAt: Timestamp!
+  notes: String
+  isCompleted: Boolean
+}
+
+type Document @table {
+  case: Case
+  documentName: String!
+  fileUrl: String!
+  documentType: String!
+  createdAt: Timestamp!
+  description: String
+  uploadDate: Date
+}
+
+type Communication @table {
+  case: Case
+  communicationType: String!
+  communicationDate: Timestamp!
+  partyInvolved: String!
+  createdAt: Timestamp!
+  subject: String
+  notes: String
+  followUpNeeded: Boolean
+}

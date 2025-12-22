@@ -1,0 +1,14 @@
+{
+  "version": "2",
+  "projectNumber": "118564489528",
+  "projectId": "casebuddy-pro",
+  "appId": "1:118564489528:web:1388888cd7286d1a9f59cd",
+  "realtimeDatabaseInstanceUri": "https://casebuddy-pro-default-rtdb.firebaseio.com",
+  "realtimeDatabaseUrl": "",
+  "storageBucket": "casebuddy-pro.firebasestorage.app",
+  "locationId": "",
+  "apiKey": "AIzaSyDq9xK7bw5_rjDmoSnvdSaAGLKycyCqaOs",
+  "authDomain": "casebuddy-pro.firebaseapp.com",
+  "messagingSenderId": "118564489528",
+  "measurementId": ""
+}
