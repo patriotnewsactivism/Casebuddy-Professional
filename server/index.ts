@@ -7,6 +7,7 @@ import { applySecurityMiddleware, secureErrorHandler } from "./middleware/securi
 import { registerAuthRoutes } from "./routes/auth";
 import { registerHealthRoutes } from "./routes/health";
 import { ensureAuditLogTable } from "./services/auditLog";
+import { registerApiNotFound } from "./middleware/notFound";
 
 const app = express();
 const httpServer = createServer(app);
@@ -93,6 +94,9 @@ app.use((req, res, next) => {
   registerAuthRoutes(app);
 
   await registerRoutes(httpServer, app);
+
+  // Ensure unmatched /api routes return a JSON 404 instead of the SPA shell
+  registerApiNotFound(app);
 
   // Secure error handler (doesn't leak stack traces in production)
   app.use(secureErrorHandler);
