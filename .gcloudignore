@@ -1,0 +1,63 @@
+# Git
+.git
+.gitignore
+
+# Dependencies (will be installed during build)
+node_modules
+
+# Development files
+.env
+.env.local
+.env.*.local
+*.env
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Source files (only dist is needed for production)
+client
+server
+shared
+script
+*.ts
+!*.d.ts
+tsconfig.json
+vite.config.ts
+drizzle.config.ts
+postcss.config.js
+tailwind.config.js
+
+# Test files
+coverage
+*.test.ts
+*.spec.ts
+__tests__
+
+# Documentation
+docs
+LICENSE
+
+# Local files
+.local
+uploads/*
+!uploads/.gitkeep
+
+# Docker (not needed for App Engine)
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Firebase (if not using)
+firebase.json
+.firebase
+firebase-debug.log
+firestore.rules
+firestore.indexes.json
+storage.rules
