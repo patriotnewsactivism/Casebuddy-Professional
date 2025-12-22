@@ -1,0 +1,60 @@
+# Google App Engine configuration for CaseBuddy Professional
+# Deploy with: gcloud app deploy
+
+runtime: nodejs20
+
+instance_class: F2
+
+# Automatic scaling configuration
+automatic_scaling:
+  min_instances: 0
+  max_instances: 10
+  min_idle_instances: 0
+  max_idle_instances: 2
+  target_cpu_utilization: 0.6
+  target_throughput_utilization: 0.8
+
+# Environment variables (sensitive values should be set via Secret Manager)
+env_variables:
+  NODE_ENV: "production"
+  PORT: "8080"
+
+# VPC connector for Cloud SQL private IP (optional, configure if using private IP)
+# vpc_access_connector:
+#   name: projects/PROJECT_ID/locations/REGION/connectors/CONNECTOR_NAME
+
+# Health check configuration
+liveness_check:
+  path: "/api/health"
+  check_interval_sec: 30
+  timeout_sec: 4
+  failure_threshold: 4
+  success_threshold: 2
+
+readiness_check:
+  path: "/api/health"
+  check_interval_sec: 5
+  timeout_sec: 4
+  failure_threshold: 2
+  success_threshold: 2
+
+# Handlers for static files and API
+handlers:
+  # Serve static assets from dist/public with caching
+  - url: /assets/(.*)
+    static_files: dist/public/assets/\1
+    upload: dist/public/assets/.*
+    secure: always
+    expiration: "365d"
+
+  # API and WebSocket routes to application
+  - url: /.*
+    script: auto
+    secure: always
+
+# Network settings
+network:
+  session_affinity: true
+
+# Entrypoint
+entrypoint: node dist/index.cjs
