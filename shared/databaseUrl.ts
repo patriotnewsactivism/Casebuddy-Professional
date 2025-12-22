@@ -6,18 +6,27 @@ export interface DatabaseEnvConfig {
   DB_HOST?: string;
   DB_PORT?: string;
   CLOUD_SQL_CONNECTION_NAME?: string;
+  INSTANCE_CONNECTION_NAME?: string;
+  DB_SOCKET_PATH?: string;
   POSTGRES_USER?: string;
   POSTGRES_PASSWORD?: string;
   POSTGRES_DB?: string;
+  POSTGRES_HOST?: string;
+  POSTGRES_PORT?: string;
 }
 
 function encode(value: string): string {
   return encodeURIComponent(value);
 }
 
-function buildSocketConnectionString(config: Required<Pick<DatabaseEnvConfig, "DB_USER" | "DB_PASSWORD" | "DB_NAME" | "CLOUD_SQL_CONNECTION_NAME">> & { DB_PORT?: string }) {
+function buildSocketConnectionString(
+  config: Required<
+    Pick<DatabaseEnvConfig, "DB_USER" | "DB_PASSWORD" | "DB_NAME" | "CLOUD_SQL_CONNECTION_NAME">
+  > & { DB_PORT?: string; DB_SOCKET_PATH?: string },
+) {
   const port = config.DB_PORT || "5432";
-  const socketHost = `/cloudsql/${config.CLOUD_SQL_CONNECTION_NAME}`;
+  const socketBase = config.DB_SOCKET_PATH || "/cloudsql";
+  const socketHost = `${socketBase}/${config.CLOUD_SQL_CONNECTION_NAME}`;
   return `postgresql://${encode(config.DB_USER)}:${encode(config.DB_PASSWORD)}@/${encode(config.DB_NAME)}?host=${encode(socketHost)}&port=${encode(port)}`;
 }
 
@@ -42,9 +51,10 @@ export function resolveDatabaseUrl(env: DatabaseEnvConfig = process.env): string
   const dbUser = env.DB_USER || env.POSTGRES_USER;
   const dbPassword = env.DB_PASSWORD || env.POSTGRES_PASSWORD;
   const dbName = env.DB_NAME || env.POSTGRES_DB;
-  const dbHost = env.DB_HOST;
-  const dbPort = env.DB_PORT;
-  const cloudSql = env.CLOUD_SQL_CONNECTION_NAME;
+  const dbHost = env.DB_HOST || env.POSTGRES_HOST;
+  const dbPort = env.DB_PORT || env.POSTGRES_PORT;
+  const cloudSql = env.CLOUD_SQL_CONNECTION_NAME || env.INSTANCE_CONNECTION_NAME;
+  const socketPath = env.DB_SOCKET_PATH;
 
   if (dbUser && dbPassword && dbName && cloudSql) {
     return buildSocketConnectionString({
@@ -53,6 +63,7 @@ export function resolveDatabaseUrl(env: DatabaseEnvConfig = process.env): string
       DB_NAME: dbName,
       CLOUD_SQL_CONNECTION_NAME: cloudSql,
       DB_PORT: dbPort,
+      DB_SOCKET_PATH: socketPath,
     });
   }
 
