@@ -6,7 +6,13 @@
       "Bash(test:*)",
       "Bash(git fetch:*)",
       "Bash(git pull:*)",
-      "Bash(npm ci)"
+      "Bash(npm ci)",
+      "Bash(docker build:*)",
+      "Bash(del package-lock.json)",
+      "Bash(git add:*)",
+      "Bash(powershell -Command \"Remove-Item -Path ''.git\\\\index.lock'' -Force\")",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ]
   }
 }
