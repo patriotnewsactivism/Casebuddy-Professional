@@ -6,6 +6,10 @@ import { resolveDatabaseUrl } from "@shared/databaseUrl";
 const connectionString = resolveDatabaseUrl();
 
 // Configure connection pool for production
+const cloudSqlConnection =
+  process.env.CLOUD_SQL_CONNECTION_NAME || process.env.INSTANCE_CONNECTION_NAME;
+const socketPath = process.env.DB_SOCKET_PATH || "/cloudsql";
+
 const poolConfig: pg.PoolConfig = {
   connectionString,
   // Connection pool settings optimized for Cloud Run/App Engine
@@ -14,13 +18,13 @@ const poolConfig: pg.PoolConfig = {
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
   // For Cloud SQL with Unix socket
-  ...(process.env.CLOUD_SQL_CONNECTION_NAME && {
-    host: `/cloudsql/${process.env.CLOUD_SQL_CONNECTION_NAME}`,
+  ...(cloudSqlConnection && {
+    host: `${socketPath}/${cloudSqlConnection}`,
   }),
 };
 
 // SSL configuration for production (when not using Cloud SQL socket)
-if (process.env.NODE_ENV === "production" && !process.env.CLOUD_SQL_CONNECTION_NAME) {
+if (process.env.NODE_ENV === "production" && !cloudSqlConnection) {
   poolConfig.ssl = {
     rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== "false",
   };
