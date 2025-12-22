@@ -12,6 +12,7 @@
     "db:push": "drizzle-kit push",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
+    "test": "node --test --import tsx tests/databaseUrl.test.ts",
     "deploy:gcloud": "npm run build && gcloud app deploy --quiet",
     "deploy:cloudrun": "gcloud builds submit --tag gcr.io/$GOOGLE_CLOUD_PROJECT/casebuddy-professional && gcloud run deploy casebuddy-professional --image gcr.io/$GOOGLE_CLOUD_PROJECT/casebuddy-professional --platform managed --region us-central1 --allow-unauthenticated",
     "deploy:firebase": "npm run build && firebase deploy",

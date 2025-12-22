@@ -1,14 +1,13 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@shared/schema";
+import { resolveDatabaseUrl } from "@shared/databaseUrl";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL environment variable is required");
-}
+const connectionString = resolveDatabaseUrl();
 
 // Configure connection pool for production
 const poolConfig: pg.PoolConfig = {
-  connectionString: process.env.DATABASE_URL,
+  connectionString,
   // Connection pool settings optimized for Cloud Run/App Engine
   max: process.env.NODE_ENV === "production" ? 20 : 5,
   min: process.env.NODE_ENV === "production" ? 5 : 1,
