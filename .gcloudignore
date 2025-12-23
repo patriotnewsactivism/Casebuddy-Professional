@@ -21,18 +21,7 @@ node_modules
 .DS_Store
 Thumbs.db
 
-# Source files (only dist is needed for production)
-client
-server
-shared
-script
-*.ts
-!*.d.ts
-tsconfig.json
-vite.config.ts
-drizzle.config.ts
-postcss.config.js
-tailwind.config.js
+# Source files (needed for Cloud Build / Cloud Run builds)
 
 # Test files
 coverage
