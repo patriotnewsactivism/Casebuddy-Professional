@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "public": "public",
+    "public": "dist/public",
     "ignore": [
       "firebase.json",
       "**/.*",
@@ -14,19 +14,6 @@
     ]
   },
   "functions": [
-    {
-      "codebase": "default",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log"
-      ],
-      "predeploy": [
-        "npm --prefix \"$RESOURCE_DIR\" run build"
-      ],
-      "source": "functions"
-    },
     {
       "source": "codebuddy-functions",
       "codebase": "codebuddyprofessional",
@@ -81,7 +68,7 @@
   },
   "apphosting": {
     "backendId": "dashboard",
-    "rootDir": "/",
+    "rootDir": ".",
     "ignore": [
       "node_modules",
       ".git",
