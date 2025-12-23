@@ -1,6 +1,9 @@
 {
   "hosting": {
     "public": "dist/public",
+    "predeploy": [
+      "npm run build"
+    ],
     "ignore": [
       "firebase.json",
       "**/.*",
