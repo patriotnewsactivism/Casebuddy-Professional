@@ -27,6 +27,6 @@ setGlobalOptions({ maxInstances: 10 });
 // https://firebase.google.com/docs/functions/get-started
 
 exports.health = onRequest((request, response) => {
-  logger.info("health_check", { structuredData: true });
+  logger.info("health_check", {structuredData: true});
   response.status(200).send("ok");
 });
