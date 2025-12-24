@@ -1,6 +1,8 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   ShieldCheck,
   FileSearch,
@@ -62,6 +64,21 @@ const securityPoints = [
   "Granular audit trails for access, uploads, and case exports.",
   "Encrypted password storage with automatic hash upgrades.",
   "Rate-limited authentication endpoints to deter brute force.",
+];
+
+const platformPreview = [
+  {
+    title: "Matter Command Center",
+    description: "Track deadlines, filings, and assignments from one live dashboard.",
+  },
+  {
+    title: "Evidence Vault",
+    description: "Keep discovery searchable, tagged, and linked to key facts.",
+  },
+  {
+    title: "Team Activity Ledger",
+    description: "See who accessed each file with time-stamped accountability.",
+  },
 ];
 
 export default function LandingPage() {
@@ -133,28 +150,48 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="space-y-4">
-              <Card className="border-border/60 bg-card/70 backdrop-blur">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <ShieldCheck className="h-4 w-4 text-accent" />
-                    Secure Case Access
-                  </CardTitle>
-                  <CardDescription>
-                    Sessions expire automatically and require re-authentication.
-                  </CardDescription>
+              <Card className="border-border/60 bg-card/80 shadow-lg backdrop-blur">
+                <CardHeader className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Lock className="h-4 w-4 text-accent" />
+                      Secure Access Portal
+                    </CardTitle>
+                    <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-primary">
+                      Login
+                    </span>
+                  </div>
+                  <CardDescription>Sign in to reach the full CaseBuddy platform.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    Private case timelines and evidence review
+                <CardContent className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="landing-username">Username</Label>
+                    <Input
+                      id="landing-username"
+                      placeholder="e.g., jsmith"
+                      autoComplete="username"
+                    />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    Audit logs for document access and exports
+                  <div className="space-y-1.5">
+                    <Label htmlFor="landing-password">Password</Label>
+                    <Input
+                      id="landing-password"
+                      type="password"
+                      placeholder="Enter your password"
+                      autoComplete="current-password"
+                    />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
-                    Rate-limited authentication & session controls
+                  <div className="flex flex-wrap gap-2">
+                    <Button asChild className="flex-1 min-w-[170px]">
+                      <Link href="/login">Continue to Sign In</Link>
+                    </Button>
+                    <Button asChild variant="outline" className="flex-1 min-w-[170px]">
+                      <Link href="/login">Create Account</Link>
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <ShieldCheck className="h-3.5 w-3.5 text-green-600" />
+                    Authenticated sessions unlock the full workspace.
                   </div>
                 </CardContent>
               </Card>
@@ -162,14 +199,22 @@ export default function LandingPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
                     <BrainCircuit className="h-4 w-4 text-accent" />
-                    AI-Powered Briefing
+                    Platform Preview
                   </CardTitle>
                   <CardDescription>
-                    Generate deposition prep, strategy notes, and legal briefs.
+                    What opens up after secure sign-in.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  Built-in trial simulations highlight objections, pivots, and winning angles.
+                <CardContent className="space-y-3">
+                  {platformPreview.map((item) => (
+                    <div key={item.title} className="flex items-start gap-2">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{item.title}</p>
+                        <p className="text-xs text-muted-foreground">{item.description}</p>
+                      </div>
+                    </div>
+                  ))}
                 </CardContent>
               </Card>
             </div>
