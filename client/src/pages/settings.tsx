@@ -26,6 +26,9 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/use-auth";
+import { useLocation } from "wouter";
 
 interface UserSettings {
   profile: {
@@ -95,8 +98,14 @@ function saveSettings(settings: UserSettings): void {
 
 export default function SettingsPage() {
   const { toast } = useToast();
+  const { logout } = useAuth();
+  const [, setLocation] = useLocation();
   const [saved, setSaved] = useState(false);
   const [settings, setSettings] = useState<UserSettings>(defaultSettings);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [updatingPassword, setUpdatingPassword] = useState(false);
 
   useEffect(() => {
     setSettings(loadSettings());
@@ -128,6 +137,55 @@ export default function SettingsPage() {
     setSaved(true);
     toast({ title: "Settings saved successfully" });
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handlePasswordChange = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!currentPassword || !newPassword) {
+      toast({
+        title: "Missing fields",
+        description: "Please enter your current and new password.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Passwords do not match",
+        description: "Confirm your new password before saving.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUpdatingPassword(true);
+    try {
+      await apiRequest("POST", "/api/auth/change-password", {
+        currentPassword,
+        newPassword,
+      });
+      toast({
+        title: "Password updated",
+        description: "Please sign in again with your new password.",
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      await logout();
+      setLocation("/login");
+    } catch (error: any) {
+      const message =
+        typeof error?.message === "string"
+          ? error.message.replace(/^\d+:\s*/, "")
+          : "Password update failed.";
+      toast({
+        title: "Password update failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingPassword(false);
+    }
   };
 
   return (
@@ -227,12 +285,52 @@ export default function SettingsPage() {
                   <Shield className="w-5 h-5" />
                   Security
                 </CardTitle>
-                <CardDescription>Password changes require user authentication (coming soon)</CardDescription>
+                <CardDescription>Manage your account security settings</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  User authentication is not yet implemented. Password and security settings will be available once authentication is added.
-                </p>
+                <form onSubmit={handlePasswordChange} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="current-password">Current Password</Label>
+                    <Input
+                      id="current-password"
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Enter current password"
+                      autoComplete="current-password"
+                      data-testid="input-current-password"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-password">New Password</Label>
+                    <Input
+                      id="new-password"
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Enter new password"
+                      autoComplete="new-password"
+                      data-testid="input-new-password"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-password">Confirm New Password</Label>
+                    <Input
+                      id="confirm-password"
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm new password"
+                      autoComplete="new-password"
+                      data-testid="input-confirm-password"
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button type="submit" variant="outline" disabled={updatingPassword} data-testid="button-change-password">
+                      {updatingPassword ? "Updating..." : "Change Password"}
+                    </Button>
+                  </div>
+                </form>
               </CardContent>
             </Card>
           </TabsContent>

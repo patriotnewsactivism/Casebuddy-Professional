@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
 
 interface CollaboratorUser {
   id: string;
@@ -37,6 +38,7 @@ function generateUserName(): string {
 }
 
 export function useCollaboration(caseId: number | null) {
+  const { user } = useAuth();
   const [collaborators, setCollaborators] = useState<CollaboratorUser[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -45,8 +47,8 @@ export function useCollaboration(caseId: number | null) {
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const shouldReconnectRef = useRef(true);
 
-  const userId = useRef(generateUserId());
-  const userName = useRef(generateUserName());
+  const userId = useRef(user?.id || generateUserId());
+  const userName = useRef(user?.username || generateUserName());
 
   const connect = useCallback(() => {
     if (!caseId || wsRef.current?.readyState === WebSocket.OPEN) return;
@@ -141,6 +143,13 @@ export function useCollaboration(caseId: number | null) {
       }));
     }
   }, []);
+
+  useEffect(() => {
+    if (user?.id) {
+      userId.current = user.id;
+      userName.current = user.username;
+    }
+  }, [user]);
 
   useEffect(() => {
     if (caseId) {

@@ -3,6 +3,8 @@ import { z } from "zod";
 import { login, register, logout, changePassword, requireAuth } from "../middleware/auth";
 import { authRateLimiter } from "../middleware/security";
 import { extractRequestInfo } from "../services/auditLog";
+import { db } from "../db";
+import { users } from "@shared/schema";
 
 // Validation schemas
 const loginSchema = z.object({
@@ -89,6 +91,15 @@ export function registerAuthRoutes(app: Express): void {
 
       const { username, password } = validation.data;
       const { ip, userAgent } = extractRequestInfo(req);
+
+      const allowPublicRegistration = process.env.ALLOW_PUBLIC_REGISTRATION === "true";
+      if (!allowPublicRegistration) {
+        const existing = await db.select({ id: users.id }).from(users).limit(1);
+        if (existing.length > 0) {
+          res.status(403).json({ error: "Registration is disabled." });
+          return;
+        }
+      }
 
       const result = await register(username, password, ip, userAgent);
 

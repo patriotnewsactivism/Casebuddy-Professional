@@ -19,6 +19,7 @@ import {
 import { useState, useEffect, createContext, useContext } from "react";
 import logo from "@assets/generated_images/minimalist_legal_logo_navy_gold.png";
 import { useSaveStatus } from "@/hooks/use-save-status";
+import { useAuth } from "@/hooks/use-auth";
 
 const MobileMenuContext = createContext<{
   isOpen: boolean;
@@ -30,7 +31,9 @@ export function useMobileMenu() {
 }
 
 export function Sidebar({ onClose }: { onClose?: () => void }) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
+  const { user, logout } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
 
   const navItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/" },
@@ -92,10 +95,28 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
       </nav>
 
       <div className="p-4 border-t border-sidebar-border/50">
-        <button className="flex items-center gap-3 px-4 py-3 w-full rounded-lg text-sidebar-foreground/60 hover:bg-destructive/10 hover:text-destructive transition-colors">
+        <button
+          className="flex items-center gap-3 px-4 py-3 w-full rounded-lg text-sidebar-foreground/60 hover:bg-destructive/10 hover:text-destructive transition-colors"
+          onClick={async () => {
+            setSigningOut(true);
+            try {
+              await logout();
+            } finally {
+              setLocation("/login");
+              setSigningOut(false);
+            }
+          }}
+          disabled={signingOut}
+          data-testid="button-sign-out"
+        >
           <LogOut className="w-5 h-5" />
-          <span>Sign Out</span>
+          <span>{signingOut ? "Signing out..." : "Sign Out"}</span>
         </button>
+        {user && (
+          <div className="mt-3 text-xs text-sidebar-foreground/50">
+            Signed in as {user.username}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -138,6 +159,8 @@ function SaveStatusIndicator() {
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user } = useAuth();
+  const userInitial = user?.username?.slice(0, 1).toUpperCase() || "U";
 
   // Close sidebar on route change for mobile
   const [location] = useLocation();
@@ -223,8 +246,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <Bell className="w-5 h-5 text-muted-foreground" />
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full border-2 border-background"></span>
               </button>
-              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-serif font-bold text-xs">
-                JD
+              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-serif font-bold text-xs" title={user?.username || "User"}>
+                {userInitial}
               </div>
             </div>
           </header>
