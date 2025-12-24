@@ -166,7 +166,7 @@ export default function CalendarPage() {
                   </div>
                 ) : (
                   upcomingDeadlines.map((caseItem) => (
-                    <Link key={caseItem.id} href={`/case/${caseItem.id}`}>
+                    <Link key={caseItem.id} href={`/app/case/${caseItem.id}`}>
                       <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-muted transition-colors cursor-pointer" data-testid={`deadline-case-${caseItem.id}`}>
                         <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                           <Clock className="w-5 h-5 text-primary" />

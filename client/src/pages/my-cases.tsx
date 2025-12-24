@@ -347,7 +347,7 @@ export default function MyCases() {
                           {caseItem.status}
                         </Badge>
                       </div>
-                      <Link href={`/case/${caseItem.id}`}>
+                      <Link href={`/app/case/${caseItem.id}`}>
                         <h3 className="text-lg font-semibold text-primary hover:underline cursor-pointer truncate" data-testid={`link-case-${caseItem.id}`}>
                           {caseItem.title}
                         </h3>
@@ -369,7 +369,7 @@ export default function MyCases() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Link href={`/case/${caseItem.id}`}>
+                        <Link href={`/app/case/${caseItem.id}`}>
                           <Button variant="outline" size="sm" data-testid={`button-open-case-${caseItem.id}`}>
                             Open Case
                           </Button>

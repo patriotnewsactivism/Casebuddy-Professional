@@ -22,7 +22,7 @@ export default function LoginPage() {
 
   const redirectTo = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get("redirect") || "/";
+    return params.get("redirect") || "/app";
   }, []);
 
   useEffect(() => {
@@ -174,6 +174,16 @@ export default function LoginPage() {
                 </button>
               </>
             )}
+          </div>
+          <div className="mt-3 text-center text-xs text-muted-foreground">
+            <button
+              type="button"
+              className="hover:underline"
+              onClick={() => setLocation("/")}
+              data-testid="button-back-to-landing"
+            >
+              Back to CaseBuddy overview
+            </button>
           </div>
         </CardContent>
       </Card>

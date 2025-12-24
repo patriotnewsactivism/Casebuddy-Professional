@@ -15,6 +15,7 @@ import ResearchPage from "@/pages/research";
 import SettingsPage from "@/pages/settings";
 import TrialPrepPage from "@/pages/trial-prep";
 import LoginPage from "@/pages/login";
+import LandingPage from "@/pages/landing";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -53,20 +54,26 @@ function ProtectedRoute({ component: Component, path }: { component: ComponentTy
 }
 
 function Router() {
+  const [location] = useLocation();
   return (
     <Switch>
+      <Route path="/" component={LandingPage} />
       <Route path="/login" component={LoginPage} />
-      <ProtectedRoute path="/" component={Dashboard} />
-      <ProtectedRoute path="/cases" component={MyCases} />
-      <ProtectedRoute path="/trial-prep" component={TrialPrepPage} />
-      <ProtectedRoute path="/calendar" component={CalendarPage} />
-      <ProtectedRoute path="/research" component={ResearchPage} />
-      <ProtectedRoute path="/settings" component={SettingsPage} />
-      <ProtectedRoute path="/case/:id" component={CaseView} />
+      <ProtectedRoute path="/app" component={Dashboard} />
+      <ProtectedRoute path="/app/cases" component={MyCases} />
+      <ProtectedRoute path="/app/trial-prep" component={TrialPrepPage} />
+      <ProtectedRoute path="/app/calendar" component={CalendarPage} />
+      <ProtectedRoute path="/app/research" component={ResearchPage} />
+      <ProtectedRoute path="/app/settings" component={SettingsPage} />
+      <ProtectedRoute path="/app/case/:id" component={CaseView} />
       <Route>
-        <RequireAuth>
+        {location.startsWith("/app") ? (
+          <RequireAuth>
+            <NotFound />
+          </RequireAuth>
+        ) : (
           <NotFound />
-        </RequireAuth>
+        )}
       </Route>
     </Switch>
   );

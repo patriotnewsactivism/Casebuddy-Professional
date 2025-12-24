@@ -65,7 +65,7 @@ export default function Dashboard() {
             <h1 className="text-2xl sm:text-3xl font-serif font-bold text-primary mb-1 sm:mb-2">Good Morning, Counselor.</h1>
             <p className="text-sm sm:text-base text-muted-foreground">Here is your case overview for today, {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.</p>
           </div>
-          <NewCaseModal onSuccess={(caseId) => navigate(`/case/${caseId}`)} />
+          <NewCaseModal onSuccess={(caseId) => navigate(`/app/case/${caseId}`)} />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -148,7 +148,12 @@ export default function Dashboard() {
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg sm:text-xl font-bold font-serif text-primary">Recent Activity</h2>
-            <Button variant="ghost" size="sm" className="text-sm text-primary">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-sm text-primary"
+              onClick={() => navigate("/app/cases")}
+            >
               <span className="hidden sm:inline">View All Cases</span>
               <span className="sm:hidden">View All</span>
               <ArrowRight className="w-4 h-4 ml-1" />
@@ -161,11 +166,11 @@ export default function Dashboard() {
               <div className="text-center py-12 border rounded-lg bg-muted/20">
                 <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
                 <p className="text-muted-foreground mb-4">No cases yet. Create your first case to get started.</p>
-                <NewCaseModal onSuccess={(caseId) => navigate(`/case/${caseId}`)} />
+                <NewCaseModal onSuccess={(caseId) => navigate(`/app/case/${caseId}`)} />
               </div>
             )}
             {cases && cases.slice(0, 5).map((c) => (
-              <Link key={c.id} href={`/case/${c.id}`}>
+              <Link key={c.id} href={`/app/case/${c.id}`}>
                 <div className="group bg-card border hover:border-accent/50 p-4 sm:p-6 rounded-xl shadow-sm hover:shadow-md transition-all cursor-pointer relative overflow-hidden" data-testid={`case-card-${c.id}`}>
                   <div className="absolute top-0 left-0 w-1 h-full bg-primary group-hover:bg-accent transition-colors"></div>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

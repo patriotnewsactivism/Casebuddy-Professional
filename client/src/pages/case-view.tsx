@@ -65,7 +65,7 @@ import { CollaborationChat } from "@/components/collaboration-chat";
 import { AIChat } from "@/components/ai-chat";
 
 export default function CaseView() {
-  const [match, params] = useRoute("/case/:id");
+  const [match, params] = useRoute("/app/case/:id");
   const caseId = params?.id;
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -108,7 +108,7 @@ export default function CaseView() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cases"] });
       toast({ title: "Case deleted successfully" });
-      navigate("/");
+      navigate("/app");
     },
     onError: () => {
       toast({ title: "Failed to delete case", variant: "destructive" });
@@ -303,7 +303,7 @@ function IngestModal() {
   const { toast } = useToast();
   const { setSaving, setSaved, setError } = useSaveStatus();
   const queryClient = useQueryClient();
-  const [match, params] = useRoute("/case/:id");
+  const [match, params] = useRoute("/app/case/:id");
   const caseId = params?.id;
 
   const uploadMutation = useMutation({
@@ -661,7 +661,7 @@ function CloudFolderBrowser({ caseId }: { caseId: string }) {
 
 function DiscoveryView() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [match, params] = useRoute("/case/:id");
+  const [match, params] = useRoute("/app/case/:id");
   const caseId = params?.id;
   
   const { data: files = [], isLoading } = useQuery({
@@ -851,7 +851,7 @@ function DiscoveryView() {
 }
 
 function TimelineView() {
-  const [match, params] = useRoute("/case/:id");
+  const [match, params] = useRoute("/app/case/:id");
   const caseId = params?.id;
   
   const { data: timeline = [], isLoading } = useQuery({

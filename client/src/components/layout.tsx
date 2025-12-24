@@ -36,12 +36,12 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
   const [signingOut, setSigningOut] = useState(false);
 
   const navItems = [
-    { icon: LayoutDashboard, label: "Dashboard", href: "/" },
-    { icon: Briefcase, label: "My Cases", href: "/cases" },
-    { icon: Gavel, label: "Trial Prep", href: "/trial-prep" },
-    { icon: Calendar, label: "Calendar", href: "/calendar" },
-    { icon: Scale, label: "Legal Research", href: "/research" },
-    { icon: Settings, label: "Settings", href: "/settings" },
+    { icon: LayoutDashboard, label: "Dashboard", href: "/app" },
+    { icon: Briefcase, label: "My Cases", href: "/app/cases" },
+    { icon: Gavel, label: "Trial Prep", href: "/app/trial-prep" },
+    { icon: Calendar, label: "Calendar", href: "/app/calendar" },
+    { icon: Scale, label: "Legal Research", href: "/app/research" },
+    { icon: Settings, label: "Settings", href: "/app/settings" },
   ];
 
   const handleNavClick = () => {
@@ -73,7 +73,10 @@ export function Sidebar({ onClose }: { onClose?: () => void }) {
 
       <nav className="flex-1 p-4 space-y-2 mt-2 md:mt-4 overflow-y-auto">
         {navItems.map((item) => {
-          const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+          const isActive =
+            location === item.href ||
+            (item.href !== "/app" && location.startsWith(`${item.href}/`)) ||
+            (item.href === "/app/cases" && location.startsWith("/app/case/"));
           return (
             <Link 
               key={item.href} 
