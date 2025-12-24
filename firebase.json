@@ -1,4 +1,4 @@
-{
+﻿{
   "hosting": {
     "public": "dist/public",
     "ignore": [
@@ -6,68 +6,7 @@
       "**/.*",
       "**/node_modules/**"
     ],
-    "rewrites" {
-    "hosting": {
-      "public": "dist/public",
-      "ignore": [
-        "firebase.json",
-        "**/.*",
-        "**/node_modules/**"
-      ],
-      "rewrites": [
-        { "source": "**", "destination": "/index.html" }
-      ]
-    },
-    "functions": [
-      {
-        "source": "codebuddy-functions",
-        "codebase": "codebuddyprofessional",
-        "disallowLegacyRuntimeConfig": true,
-        "ignore": [
-          "node_modules",
-          ".git",
-          "firebase-debug.log",
-          "firebase-debug.*.log",
-          "*.local",
-          ".runtimeconfig.json"
-        ]
-      }
-    ],
-    "firestore": {
-      "database": "casebuddy",
-      "location": "nam5",
-      "rules": "firestore.rules",
-      "indexes": "firestore.indexes.json"
-    },
-    "storage": {
-      "rules": "storage.rules",
-      "bucket": "casebuddy-pro.firebasestorage.app"
-    },
-    "emulators": {
-      "auth": { "port": 9099 },
-      "functions": { "port": 5001 },
-      "firestore": { "port": 8080 },
-      "hosting": { "port": 5000 },
-      "storage": { "port": 9199 },
-      "ui": { "enabled": true },
-      "singleProjectMode": true,
-      "dataconnect": { "dataDir": "dataconnect/.dataconnect/pgliteData" }
-    },
-    "dataconnect": { "source": "dataconnect" },
-    "apphosting": {
-      "backendId": "dashboard",
-      "rootDir": ".",
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
-        "functions"
-      ],
-      "alwaysDeployFromSource": true
-    },
-    "database": { "rules": "database.rules.json" }
-  }: [
+    "rewrites": [
       {
         "source": "**",
         "destination": "/index.html"
@@ -85,8 +24,6 @@
         "firebase-debug.log",
         "firebase-debug.*.log",
         "*.local",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
         ".runtimeconfig.json"
       ]
     }
