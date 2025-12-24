@@ -37,6 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await fetch("/api/auth/check", { credentials: "include" });
       if (!res.ok) {
+        queryClient.clear();
         setUser(null);
         return;
       }
@@ -44,9 +45,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data?.authenticated && data.user) {
         setUser(data.user as AuthUser);
       } else {
+        queryClient.clear();
         setUser(null);
       }
     } catch {
+      queryClient.clear();
       setUser(null);
     } finally {
       setLoading(false);
@@ -61,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const res = await fetch("/api/auth/check", { credentials: "include" });
         if (!active) return;
         if (!res.ok) {
+          queryClient.clear();
           setUser(null);
           return;
         }
@@ -68,10 +72,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (data?.authenticated && data.user) {
           setUser(data.user as AuthUser);
         } else {
+          queryClient.clear();
           setUser(null);
         }
       } catch {
-        if (active) setUser(null);
+        if (active) {
+          queryClient.clear();
+          setUser(null);
+        }
       } finally {
         if (active) setLoading(false);
       }
