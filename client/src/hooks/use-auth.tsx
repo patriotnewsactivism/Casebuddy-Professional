@@ -28,6 +28,25 @@ function parseAuthUser(payload: unknown): AuthUser {
   return data.user;
 }
 
+async function parseJsonResponse(res: Response, context: string) {
+  const contentType = res.headers.get("content-type");
+  const bodyText = await res.text();
+
+  if (!contentType?.includes("application/json")) {
+    const preview = bodyText.slice(0, 200).trim();
+    const responseHint = preview ? ` Response preview: ${preview}` : "";
+    throw new Error(
+      `${context} failed: received a non-JSON response from the server. Please ensure the API is reachable and try again.${responseHint}`,
+    );
+  }
+
+  try {
+    return JSON.parse(bodyText);
+  } catch {
+    throw new Error(`${context} failed: unable to parse the server response.`);
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (username: string, password: string) => {
     const res = await apiRequest("POST", "/api/auth/login", { username, password });
-    const payload = await res.json();
+    const payload = await parseJsonResponse(res, "Login");
     const authUser = parseAuthUser(payload);
     setUser(authUser);
     return authUser;
@@ -100,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = useCallback(async (username: string, password: string) => {
     const res = await apiRequest("POST", "/api/auth/register", { username, password });
-    const payload = await res.json();
+    const payload = await parseJsonResponse(res, "Registration");
     const authUser = parseAuthUser(payload);
     setUser(authUser);
     return authUser;
