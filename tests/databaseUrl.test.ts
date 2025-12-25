@@ -76,6 +76,30 @@ test("uses PostgreSQL-style host variables when provided", () => {
   assert.equal(url, "postgresql://casebuddy:s3cret!@db.internal:6432/cases");
 });
 
+test("wraps IPv6 hosts in brackets for TCP connections", () => {
+  delete process.env.DATABASE_URL;
+  process.env.DB_USER = "casebuddy";
+  process.env.DB_PASSWORD = "s3cret!";
+  process.env.DB_NAME = "cases";
+  process.env.DB_HOST = "2001:db8::1";
+  process.env.DB_PORT = "5432";
+
+  const url = resolveDatabaseUrl();
+  assert.equal(url, "postgresql://casebuddy:s3cret!@[2001:db8::1]:5432/cases");
+});
+
+test("trims whitespace from environment values", () => {
+  delete process.env.DATABASE_URL;
+  process.env.DB_USER = "  casebuddy  ";
+  process.env.DB_PASSWORD = "  s3cret!  ";
+  process.env.DB_NAME = "  cases  ";
+  process.env.DB_HOST = "  127.0.0.1  ";
+  process.env.DB_PORT = " 5432 ";
+
+  const url = resolveDatabaseUrl();
+  assert.equal(url, "postgresql://casebuddy:s3cret!@127.0.0.1:5432/cases");
+});
+
 test("throws when no database configuration is available", () => {
   delete process.env.DATABASE_URL;
   delete process.env.DB_USER;

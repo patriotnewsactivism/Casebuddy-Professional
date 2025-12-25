@@ -15,8 +15,25 @@ export interface DatabaseEnvConfig {
   POSTGRES_PORT?: string;
 }
 
+function normalizeEnvValue(value?: string): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 function encode(value: string): string {
   return encodeURIComponent(value);
+}
+
+function formatHost(host: string): string {
+  const normalized = host.trim();
+  const alreadyBracketed = normalized.startsWith("[") && normalized.endsWith("]");
+  const hasPortSuffix = /^[^:]+:\d+$/.test(normalized);
+
+  if (alreadyBracketed || !normalized.includes(":") || hasPortSuffix) {
+    return normalized;
+  }
+
+  return `[${normalized}]`;
 }
 
 function buildSocketConnectionString(
@@ -30,9 +47,12 @@ function buildSocketConnectionString(
   return `postgresql://${encode(config.DB_USER)}:${encode(config.DB_PASSWORD)}@/${encode(config.DB_NAME)}?host=${encode(socketHost)}&port=${encode(port)}`;
 }
 
-function buildTcpConnectionString(config: Required<Pick<DatabaseEnvConfig, "DB_USER" | "DB_PASSWORD" | "DB_NAME" | "DB_HOST">> & { DB_PORT?: string }) {
+function buildTcpConnectionString(
+  config: Required<Pick<DatabaseEnvConfig, "DB_USER" | "DB_PASSWORD" | "DB_NAME" | "DB_HOST">> & { DB_PORT?: string },
+) {
   const port = config.DB_PORT || "5432";
-  return `postgresql://${encode(config.DB_USER)}:${encode(config.DB_PASSWORD)}@${config.DB_HOST}:${port}/${encode(config.DB_NAME)}`;
+  const host = formatHost(config.DB_HOST);
+  return `postgresql://${encode(config.DB_USER)}:${encode(config.DB_PASSWORD)}@${host}:${port}/${encode(config.DB_NAME)}`;
 }
 
 /**
@@ -44,17 +64,18 @@ function buildTcpConnectionString(config: Required<Pick<DatabaseEnvConfig, "DB_U
  * 3. Standard TCP parameters (DB_USER, DB_PASSWORD, DB_NAME, DB_HOST)
  */
 export function resolveDatabaseUrl(env: DatabaseEnvConfig = process.env): string {
-  if (env.DATABASE_URL?.trim()) {
-    return env.DATABASE_URL.trim();
+  const databaseUrl = normalizeEnvValue(env.DATABASE_URL);
+  if (databaseUrl) {
+    return databaseUrl;
   }
 
-  const dbUser = env.DB_USER || env.POSTGRES_USER;
-  const dbPassword = env.DB_PASSWORD || env.POSTGRES_PASSWORD;
-  const dbName = env.DB_NAME || env.POSTGRES_DB;
-  const dbHost = env.DB_HOST || env.POSTGRES_HOST;
-  const dbPort = env.DB_PORT || env.POSTGRES_PORT;
-  const cloudSql = env.CLOUD_SQL_CONNECTION_NAME || env.INSTANCE_CONNECTION_NAME;
-  const socketPath = env.DB_SOCKET_PATH;
+  const dbUser = normalizeEnvValue(env.DB_USER || env.POSTGRES_USER);
+  const dbPassword = normalizeEnvValue(env.DB_PASSWORD || env.POSTGRES_PASSWORD);
+  const dbName = normalizeEnvValue(env.DB_NAME || env.POSTGRES_DB);
+  const dbHost = normalizeEnvValue(env.DB_HOST || env.POSTGRES_HOST);
+  const dbPort = normalizeEnvValue(env.DB_PORT || env.POSTGRES_PORT);
+  const cloudSql = normalizeEnvValue(env.CLOUD_SQL_CONNECTION_NAME || env.INSTANCE_CONNECTION_NAME);
+  const socketPath = normalizeEnvValue(env.DB_SOCKET_PATH);
 
   if (dbUser && dbPassword && dbName && cloudSql) {
     return buildSocketConnectionString({
