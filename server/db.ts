@@ -3,6 +3,8 @@ import pg from "pg";
 import * as schema from "@shared/schema";
 import { resolveDatabaseUrl } from "@shared/databaseUrl";
 
+const { Pool } = pg;
+
 const connectionString = resolveDatabaseUrl();
 
 // Configure connection pool for production
@@ -30,10 +32,10 @@ if (process.env.NODE_ENV === "production" && !cloudSqlConnection) {
   };
 }
 
-const pool = new pg.Pool(poolConfig);
+const pool = new Pool(poolConfig);
 
 // Handle pool errors gracefully
-pool.on("error", (err) => {
+pool.on("error", (err: Error) => {
   console.error("Unexpected database pool error:", err);
 });
 

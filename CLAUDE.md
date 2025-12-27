@@ -34,9 +34,10 @@ npm start           # Start production server
 npm run db:push     # Push schema changes to database
 ```
 
-### Type Checking
+### Type Checking and Testing
 ```bash
 npm run check       # Run TypeScript type checking
+npm test            # Run Node.js test suite (tests/**.test.ts)
 ```
 
 ## Architecture Overview
@@ -160,17 +161,38 @@ WebSocket collaboration is implemented in `server/services/collaboration.ts`:
 
 The build process (`script/build.ts`) uses:
 1. **Vite** for client-side bundling (outputs to `dist/public`)
+   - Custom `metaImagesPlugin` for processing meta images
+   - Manual code splitting: vendor chunk (React), UI chunk (Radix components)
 2. **esbuild** for server-side bundling (outputs to `dist/index.cjs`)
 3. Server dependencies are bundled (except those in externals list) to reduce cold start times
 
 ## Environment Variables
 
-Required environment variables (set in Replit Secrets or `.env`):
-- `DATABASE_URL` - PostgreSQL connection string (required)
-- `GOOGLE_GENERATIVE_AI_API_KEY` - For AI features (required for AI functionality)
-- `DAILY_API_KEY` - For video conferencing (optional, video features disabled without it)
+See `.env.example` for all configuration options. Key variables:
+
+**Required:**
+- `DATABASE_URL` - PostgreSQL connection string
+- `GOOGLE_GENAI_API_KEY` - Gemini AI API key for AI features
+- `SESSION_SECRET` - Session signing secret (min 32 chars, generate with: `openssl rand -hex 32`)
+
+**Application Settings:**
 - `NODE_ENV` - Set to "production" in production
 - `PORT` - Server port (default: 5000)
+
+**Optional Integrations:**
+- `DAILY_API_KEY` - Daily.co API key for video conferencing
+- `DAILY_DOMAIN` - Daily.co domain (e.g., your-domain.daily.co)
+- `GOOGLE_DRIVE_CLIENT_ID`, `GOOGLE_DRIVE_CLIENT_SECRET` - Google Drive integration
+- `GOOGLE_CLOUD_PROJECT` - GCP project ID
+
+**Security & File Upload:**
+- `ALLOW_PUBLIC_REGISTRATION` - Set to "true" to allow public signups (default: false)
+- `MAX_FILE_SIZE` - Maximum upload size in bytes (default: 52428800 = 50MB)
+- `UPLOAD_DIR` - Upload directory (default: uploads)
+
+**Rate Limiting:**
+- `API_RATE_LIMIT` - API requests per 15 minutes (default: 500)
+- `AUTH_RATE_LIMIT` - Auth attempts per 15 minutes (default: 10)
 
 ## Key Development Patterns
 
@@ -295,10 +317,12 @@ When adding new API endpoints:
 5. Use `aiRateLimiter` for AI-powered endpoints
 6. Use `uploadRateLimiter` for file upload endpoints
 
-### Environment Variables (Security)
+### Session Management
 
-Additional security-related environment variables:
-- `SESSION_SECRET` - Secret for session signing (auto-generated if not set)
+Session configuration:
+- `SESSION_SECRET` - Required in production; auto-generated in development if not set
+- Sessions stored in PostgreSQL via `connect-pg-simple`
+- Session expiry and cleanup handled automatically
 
 ## Production Deployment
 
@@ -367,19 +391,15 @@ npm run cloudsql:proxy
 DATABASE_URL=postgresql://user:pass@localhost:5432/casebuddy?host=/cloudsql/PROJECT:REGION:INSTANCE
 ```
 
-Environment variables for database:
+### Cloud-Specific Environment Variables
+
+For cloud deployments:
 - `DATABASE_URL` - Connection string (required)
-- `CLOUD_SQL_CONNECTION_NAME` - For Unix socket connection
-- `DB_SSL_REJECT_UNAUTHORIZED` - Set to "false" for self-signed certs
-
-### Environment Variables
-
-See `.env.example` for all configuration options:
 - `GOOGLE_CLOUD_PROJECT` - GCP project ID
-- `GOOGLE_GENAI_API_KEY` - Gemini AI API key
-- `SESSION_SECRET` - Session signing secret (32+ chars)
-- `DATABASE_URL` - PostgreSQL connection string
-- `DAILY_API_KEY` - Video conferencing (optional)
+- `CLOUD_SQL_CONNECTION_NAME` - For Cloud SQL Unix socket connection
+- `DB_SSL_REJECT_UNAUTHORIZED` - Set to "false" for self-signed certs
+- `GCS_BUCKET_NAME` - Google Cloud Storage bucket for file uploads
+- `STRUCTURED_LOGGING` - Enable for Cloud Logging integration
 
 ### CI/CD Pipeline
 
