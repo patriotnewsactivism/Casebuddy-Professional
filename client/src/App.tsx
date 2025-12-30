@@ -17,6 +17,25 @@ import TrialPrepPage from "@/pages/trial-prep";
 import LoginPage from "@/pages/login";
 import LandingPage from "@/pages/landing";
 
+function RootRoute() {
+  const [, setLocation] = useLocation();
+  const isCaseBuddyLive =
+    typeof window !== "undefined" &&
+    ["casebuddy.live", "www.casebuddy.live"].includes(window.location.hostname.toLowerCase());
+
+  useEffect(() => {
+    if (isCaseBuddyLive) {
+      setLocation("/login");
+    }
+  }, [isCaseBuddyLive, setLocation]);
+
+  if (isCaseBuddyLive) {
+    return null;
+  }
+
+  return <LandingPage />;
+}
+
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const [location, setLocation] = useLocation();
@@ -57,7 +76,7 @@ function Router() {
   const [location] = useLocation();
   return (
     <Switch>
-      <Route path="/" component={LandingPage} />
+      <Route path="/" component={RootRoute} />
       <Route path="/login" component={LoginPage} />
       <ProtectedRoute path="/app" component={Dashboard} />
       <ProtectedRoute path="/app/cases" component={MyCases} />
