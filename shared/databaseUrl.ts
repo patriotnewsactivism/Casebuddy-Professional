@@ -43,7 +43,7 @@ function buildTcpConnectionString(config: Required<Pick<DatabaseEnvConfig, "DB_U
  * 2. Cloud SQL socket parameters (DB_USER, DB_PASSWORD, DB_NAME, CLOUD_SQL_CONNECTION_NAME)
  * 3. Standard TCP parameters (DB_USER, DB_PASSWORD, DB_NAME, DB_HOST)
  */
-export function resolveDatabaseUrl(env: DatabaseEnvConfig = process.env): string {
+export function resolveDatabaseUrl(env: DatabaseEnvConfig = process.env as DatabaseEnvConfig): string {
   if (env.DATABASE_URL?.trim()) {
     return env.DATABASE_URL.trim();
   }
